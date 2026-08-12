@@ -3,8 +3,10 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
+    voyage_api_key: str = ""
     llm_model: str = "claude-sonnet-5"
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "voyage-code-3"
+    embed_batch_size: int = 128
     cors_origins: str = "http://localhost:3000"
     max_file_bytes: int = 200_000
     chunk_size: int = 1200

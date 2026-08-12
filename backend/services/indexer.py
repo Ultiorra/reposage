@@ -1,18 +1,18 @@
 import uuid
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import voyageai
 
 from core.config import settings
 
-_model: SentenceTransformer | None = None
+_client: voyageai.Client | None = None
 
 
-def _get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer(settings.embedding_model)
-    return _model
+def _get_client() -> voyageai.Client:
+    global _client
+    if _client is None:
+        _client = voyageai.Client(api_key=settings.voyage_api_key)
+    return _client
 
 
 def _chunk(text: str, size: int, overlap: int) -> list[str]:
@@ -26,23 +26,33 @@ def _chunk(text: str, size: int, overlap: int) -> list[str]:
     return chunks
 
 
+def _embed(texts: list[str], input_type: str) -> np.ndarray:
+    client = _get_client()
+    vectors: list[list[float]] = []
+    batch = settings.embed_batch_size
+    for i in range(0, len(texts), batch):
+        result = client.embed(
+            texts[i:i + batch],
+            model=settings.embedding_model,
+            input_type=input_type,
+        )
+        vectors.extend(result.embeddings)
+    return np.array(vectors, dtype="float32")
+
+
 class RepoIndex:
     def __init__(self, files: dict[str, str]):
         self.files = files
         self.chunk_texts: list[str] = []
         self.chunk_paths: list[str] = []
-        model = _get_model()
         for path, content in files.items():
             for piece in _chunk(content, settings.chunk_size, settings.chunk_overlap):
                 self.chunk_texts.append(piece)
                 self.chunk_paths.append(path)
-        self.embeddings = model.encode(
-            self.chunk_texts, convert_to_numpy=True, normalize_embeddings=True
-        )
+        self.embeddings = _embed(self.chunk_texts, "document")
 
     def search(self, query: str, k: int) -> list[dict]:
-        model = _get_model()
-        q = model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
+        q = _embed([query], "query")[0]
         scores = self.embeddings @ q
         top = np.argsort(scores)[::-1][:k]
         return [
