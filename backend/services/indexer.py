@@ -16,12 +16,17 @@ def _get_client() -> voyageai.Client:
 
 
 def _chunk(text: str, size: int, overlap: int) -> list[str]:
+    stripped = text.strip()
+    if not stripped:
+        return []
     if len(text) <= size:
         return [text]
     chunks = []
     start = 0
     while start < len(text):
-        chunks.append(text[start:start + size])
+        piece = text[start:start + size]
+        if piece.strip():
+            chunks.append(piece)
         start += size - overlap
     return chunks
 
@@ -47,9 +52,14 @@ class RepoIndex:
         self.chunk_paths: list[str] = []
         for path, content in files.items():
             for piece in _chunk(content, settings.chunk_size, settings.chunk_overlap):
+                if not piece.strip():
+                    continue
                 self.chunk_texts.append(piece)
                 self.chunk_paths.append(path)
-        self.embeddings = _embed(self.chunk_texts, "document")
+        if not self.chunk_texts:
+            self.embeddings = np.zeros((0, 1), dtype="float32")
+        else:
+            self.embeddings = _embed(self.chunk_texts, "document")
 
     def search(self, query: str, k: int) -> list[dict]:
         q = _embed([query], "query")[0]
